@@ -138,4 +138,3 @@ if uploaded_file is not None:
     - For each attribute, the level with the highest part-worth utility indicates the respondents' preferred option.
     - These preferred levels are the most favored by respondents and can be prioritized in product development or marketing strategies.
     """)
-
