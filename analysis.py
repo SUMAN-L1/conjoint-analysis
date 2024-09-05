@@ -4,22 +4,28 @@ import numpy as np
 import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
 import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
+# Page configuration
 st.set_page_config(layout="wide")
 st.markdown(
-    "<h1 style='text-align: center;'>Ranking-Based Conjoint Analyser by <a href='SumanEcon'>SumanEcon",
+    "<h1 style='text-align: center;'>Advanced Ranking-Based Conjoint Analyser by <a href='SumanEcon'>SumanEcon",
     unsafe_allow_html=True
 )
 st.markdown(
     """
     <p align="center">
       <a href="https://github.com/DenverCoder1/readme-typing-svg">
-        <img src="https://readme-typing-svg.herokuapp.com?font=Time+New+Roman&color=yellow&size=30&center=true&vCenter=true&width=600&height=100&lines=Conjoint+Analysis+Made+Simple!;rankconjoint_analyser-1.0;" alt="Typing SVG">
+        <img src="https://readme-typing-svg.herokuapp.com?font=Time+New+Roman&color=yellow&size=30&center=true&vCenter=true&width=600&height=100&lines=Conjoint+Analysis+Made+Simple!;rankconjoint_analyser-2.0;" alt="Typing SVG">
       </a>
     </p>
     """,
     unsafe_allow_html=True
 )
+
 # Upload data
 uploaded_file = st.file_uploader("Upload your data file (CSV or Excel)", type=["csv", "xlsx", "xls"])
 if uploaded_file is not None:
@@ -29,9 +35,9 @@ if uploaded_file is not None:
     else:
         df = pd.read_excel(uploaded_file)
 
-    st.write("Data Preview:")
-    st.write(df.head())
-    
+    st.write("### Data Preview:")
+    st.dataframe(df.head())
+
     # Identify the last column as the ranking column
     ranking_column = df.columns[-1]
     
@@ -41,7 +47,14 @@ if uploaded_file is not None:
     
     # Fit the model
     model_fit = smf.ols(model, data=df).fit()
+    st.write("### Model Summary:")
     st.write(model_fit.summary())
+
+    # Advanced statistical metrics
+    st.write("### Advanced Model Metrics:")
+    st.write(f"Adjusted R-squared: {model_fit.rsquared_adj:.4f}")
+    st.write(f"AIC (Akaike Information Criterion): {model_fit.aic:.4f}")
+    st.write(f"BIC (Bayesian Information Criterion): {model_fit.bic:.4f}")
 
     # Extracting part-worths and importance
     level_name = []
@@ -66,26 +79,56 @@ if uploaded_file is not None:
     # Attribute importance
     attribute_importance = [round(100 * (i / sum(part_worth_range)), 2) for i in part_worth_range]
     
-    st.write("Attribute Importance:")
-    st.write(dict(zip(conjoint_attributes, attribute_importance)))
+    st.write("### Attribute Importance:")
+    attribute_importance_dict = dict(zip(conjoint_attributes, attribute_importance))
+    st.write(attribute_importance_dict)
+
+    # Visualizing attribute importance using Plotly
+    fig_importance = px.bar(
+        x=conjoint_attributes, 
+        y=attribute_importance, 
+        labels={'x':'Attributes', 'y':'Importance'},
+        title='Relative Importance of Attributes'
+    )
+    st.plotly_chart(fig_importance)
 
     # Part-worths
     part_worth_dict = {}
     for item, pw, levels in zip(conjoint_attributes, part_worth, level_name):
-        st.write(f"Attribute: {item}")
-        st.write(f"    Relative importance: {attribute_importance[conjoint_attributes.tolist().index(item)]}")
-        st.write(f"    Level wise part worths:")
+        st.write(f"### Attribute: {item}")
+        st.write(f"    Relative importance: {attribute_importance[conjoint_attributes.tolist().index(item)]}%")
+        st.write(f"    Level wise part-worths:")
         for level, value in zip(levels, pw):
             st.write(f"        {level}: {value}")
             part_worth_dict[level] = value
 
-    # Plotting relative importance of attributes
-    plt.figure(figsize=(10, 5))
-    sns.barplot(x=conjoint_attributes, y=attribute_importance)
-    plt.title('Relative importance of attributes')
-    plt.xlabel('Attributes')
-    plt.ylabel('Importance')
-    st.pyplot(plt)
+    # Visualizing Part-worths using Plotly
+    for item, pw, levels in zip(conjoint_attributes, part_worth, level_name):
+        fig_pw = go.Figure(data=[
+            go.Bar(name=f'{item}', x=levels, y=pw)
+        ])
+        fig_pw.update_layout(
+            title=f"Part-worths for {item}",
+            xaxis_title="Levels",
+            yaxis_title="Part-worth"
+        )
+        st.plotly_chart(fig_pw)
+
+    # PCA for attribute importance (optional advanced technique)
+    st.write("### PCA Analysis on Attributes:")
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(df[conjoint_attributes])
+
+    pca = PCA(n_components=2)
+    pca_result = pca.fit_transform(X_scaled)
+
+    fig_pca = px.scatter(
+        pca_result, 
+        x=0, y=1, 
+        labels={'0':'PCA 1', '1':'PCA 2'}, 
+        title='PCA of Attribute Importance'
+    )
+    st.plotly_chart(fig_pca)
 
     # Utility calculation
     utility = []
@@ -96,10 +139,17 @@ if uploaded_file is not None:
 
     # Profile with the highest utility score
     best_profile = df.iloc[np.argmax(utility)]
-    st.write("The profile that has the highest utility score:")
+    st.write("### The profile that has the highest utility score:")
     st.write(best_profile)
 
     # Preferred levels in each attribute
-    st.write("Preferred levels in each attribute:")
+    st.write("### Preferred levels in each attribute:")
     for i, item in enumerate(conjoint_attributes):
         st.write(f"Preferred level in {item} is :: {level_name[i][important_levels[item]]}")
+
+    # Correlation heatmap between attributes
+    st.write("### Correlation Heatmap between Attributes:")
+    plt.figure(figsize=(10, 5))
+    corr = df[conjoint_attributes].apply(lambda x: pd.factorize(x)[0]).corr()
+    sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f")
+    st.pyplot(plt)
