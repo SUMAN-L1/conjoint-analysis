@@ -172,10 +172,6 @@ if uploaded_file is not None:
         
         attribute_importance = [round(100 * (i / sum(part_worth_range)), 2) for i in part_worth_range]
         
-        # Profile with the highest utility score
-        best_profile = df.iloc[np.argmax(utility)]
-        st.write("### The profile that has the highest utility score:")
-        st.write(best_profile)
         # Plot for part-worth utilities
         for i, item in enumerate(conjoint_attributes):
             plt.figure(figsize=(10, 5))
