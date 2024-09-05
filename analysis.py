@@ -124,9 +124,4 @@ if uploaded_file is not None:
     for i, item in enumerate(conjoint_attributes):
         st.write(f"Preferred level in {item} is :: {level_name[i][important_levels[item]]}")
 
-    # Correlation heatmap between attributes
-    st.write("### Correlation Heatmap between Attributes:")
-    plt.figure(figsize=(10, 5))
-    corr = df[conjoint_attributes].apply(lambda x: pd.factorize(x)[0]).corr()
-    sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f")
-    st.pyplot(plt)
+   
