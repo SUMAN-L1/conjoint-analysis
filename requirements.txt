@@ -1,3 +1,9 @@
 statsmodels
 seaborn
 openpyxl
+streamlit
+pandas
+numpy
+matplotlib
+plotly
+scikit-learn
