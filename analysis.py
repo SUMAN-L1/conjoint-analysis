@@ -106,22 +106,7 @@ if uploaded_file is not None:
     )
     st.plotly_chart(fig_importance)
 
-    # PCA for attribute importance (optional advanced technique)
-    st.write("### PCA Analysis on Attributes:")
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(df[conjoint_attributes])
-
-    pca = PCA(n_components=2)
-    pca_result = pca.fit_transform(X_scaled)
-
-    fig_pca = px.scatter(
-        pca_result, 
-        x=0, y=1, 
-        labels={'0':'PCA 1', '1':'PCA 2'}, 
-        title='PCA of Attribute Importance'
-    )
-    st.plotly_chart(fig_pca)
-
+    
     # Utility calculation
     utility = []
     for i in range(df.shape[0]):
