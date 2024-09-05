@@ -1,138 +1,174 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import statsmodels.api as sm
-import seaborn as sns
+import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
-from io import StringIO
+import seaborn as sns
 
-# Set up the Streamlit page
-st.title('Conjoint Analysis Tool')
+# Set page configuration and title
+st.set_page_config(layout="wide")
+st.markdown(
+    "<h1 style='text-align: center;'>Ranking-Based Conjoint Analyser by <a href='SumanEcon'>SumanEcon</a></h1>",
+    unsafe_allow_html=True
+)
+st.markdown(
+    """
+    <p align="center">
+      <a href="https://github.com/DenverCoder1/readme-typing-svg">
+        <img src="https://readme-typing-svg.herokuapp.com?font=Time+New+Roman&color=yellow&size=30&center=true&vCenter=true&width=600&height=100&lines=Conjoint+Analysis+Made+Simple!;rankconjoint_analyser-1.0;" alt="Typing SVG">
+      </a>
+    </p>
+    """,
+    unsafe_allow_html=True
+)
 
-# File upload section
-st.sidebar.header("Upload your dataset")
-uploaded_file = st.sidebar.file_uploader("Upload CSV, XLSX, or XLS", type=['csv', 'xlsx', 'xls'])
-
+# Upload data
+uploaded_file = st.file_uploader("Upload your data file (CSV or Excel)", type=["csv", "xlsx", "xls"])
 if uploaded_file is not None:
-    # Determine the file type and read the dataset
+    # Read the uploaded data
     if uploaded_file.name.endswith('.csv'):
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
-    
-    # Display dataset preview
-    st.write("Dataset Preview:")
+
+    st.write("### Data Preview:")
     st.write(df.head())
     
-    # Select the target (dependent) variable
-    target_var = st.selectbox('Select the dependent variable (e.g., selected or rating):', df.columns)
+    # Identify the last column as the ranking column
+    ranking_column = df.columns[-1]
     
-    # Select columns to exclude from independent variables
-    exclude_vars = st.multiselect('Exclude columns (e.g., IDs, non-numeric):', df.columns, default=[target_var])
+    # Conjoint attributes and model specification
+    conjoint_attributes = df.columns[:-1]  # Assuming the last column is 'ranking'
+    model = f'{ranking_column} ~ ' + ' + '.join([f'C({attr}, Sum)' for attr in conjoint_attributes])
     
-    # Define the independent variables
-    independent_vars = [col for col in df.columns if col not in exclude_vars]
+    # Fit the model
+    model_fit = smf.ols(model, data=df).fit()
     
-    # Handle missing values
-    df = df.dropna(subset=[target_var])
+    # Display model summary
+    st.write("### Model Summary:")
+    st.write(model_fit.summary())
 
-    y = df[target_var]
-    x = df[independent_vars]
-    
-    # Convert categorical variables into dummy/indicator variables
-    xdum = pd.get_dummies(x)
-    
-    # Regression model
-    res = sm.OLS(y, xdum).fit()
-
-    # Show regression summary
-    st.write("Regression Summary:")
-    st.write(res.summary())
-
-    # Interpretation of regression results
-    st.markdown("**Interpretation:**")
-    st.write("""
-    The regression summary shows the coefficient values for each variable, the p-values indicating the significance
-    of the variables, and the R-squared value that tells how well the model fits the data. 
-    Coefficients closer to zero indicate a smaller effect, while larger coefficients suggest a stronger influence.
-    If the p-value is less than 0.05, the variable is considered significant at a 95% confidence level.
+    # Interpretation of model summary:
+    st.markdown("""
+    **Interpretation of the Model Summary:**
+    - **Coefficients:** The coefficients represent the part-worth utilities for the different levels of each attribute. A higher coefficient indicates a higher preference for that level.
+    - **p-values:** This shows the statistical significance of each level. A p-value < 0.05 suggests that the level has a significant impact on the ranking.
+    - **R-squared:** This value tells us how well the model explains the variation in the ranking. Higher values indicate a better fit.
     """)
 
-    # DataFrame for regression results
-    df_res = pd.DataFrame({
-        'param_name': res.params.keys(),
-        'param_w': res.params.values,
-        'pval': res.pvalues
-    })
-    
-    # Calculate absolute values and significance at 95% confidence
-    df_res['abs_param_w'] = np.abs(df_res['param_w'])
-    df_res['is_sig_95'] = df_res['pval'] < 0.05
-    df_res['c'] = ['blue' if x else 'red' for x in df_res['is_sig_95']]
-    
-    # Sort by absolute parameter values
-    df_res = df_res.sort_values(by='abs_param_w', ascending=True)
+    # Extracting part-worths and importance
+    level_name = []
+    part_worth = []
+    part_worth_range = []
+    important_levels = {}
+    end = 1
 
-    # Bar plot of parameter weights (Part Worth)
-    st.write("Part Worths of Attributes:")
-    fig, ax = plt.subplots(figsize=(14, 8))
-    plt.title('Part Worth')
-    plt.barh(df_res['param_name'], df_res['param_w'], color=df_res['c'])
-    plt.xlabel('Parameter Weight')
-    st.pyplot(fig)
+    for item in conjoint_attributes:
+        nlevels = len(list(np.unique(df[item])))
+        level_name.append(list(np.unique(df[item])))
 
-    # Interpretation of part-worth
-    st.markdown("**Interpretation of Part Worths:**")
-    st.write("""
-    Part worths represent the contribution of each attribute level to the overall preference.
-    Blue bars represent significant attributes (p < 0.05), while red bars are not significant. 
-    Larger absolute part worths indicate greater importance in the decision-making process.
+        begin = end
+        end = begin + nlevels - 1
+
+        new_part_worth = list(model_fit.params[begin:end])
+        new_part_worth.append((-1) * sum(new_part_worth))  # Ensure the part-worths sum to zero
+        important_levels[item] = np.argmax(new_part_worth)
+        part_worth.append(new_part_worth)
+        part_worth_range.append(max(new_part_worth) - min(new_part_worth))
+
+    # Attribute importance
+    attribute_importance = [round(100 * (i / sum(part_worth_range)), 2) for i in part_worth_range]
+    
+    st.write("### Attribute Importance:")
+    importance_dict = dict(zip(conjoint_attributes, attribute_importance))
+    st.write(importance_dict)
+
+    # Interpretation of attribute importance:
+    st.markdown("""
+    **Interpretation of Attribute Importance:**
+    - The relative importance values indicate how much each attribute influences the ranking decision.
+    - Attributes with higher values are more important to the respondents, while those with lower values have less influence on their decisions.
     """)
 
-    # Compute importance per feature
-    range_per_feature = dict()
-    for key, coeff in res.params.items():
-        feature = key.split('_')[0]
-        if feature not in range_per_feature:
-            range_per_feature[feature] = []
-        range_per_feature[feature].append(coeff)
-    
-    # Importance calculation
-    importance_per_feature = {k: max(v) - min(v) for k, v in range_per_feature.items()}
-    total_feature_importance = sum(importance_per_feature.values())
-    relative_importance_per_feature = {k: 100 * round(v / total_feature_importance, 3) for k, v in importance_per_feature.items()}
+    # Part-worths for each attribute level
+    part_worth_dict = {}
+    for item, pw, levels in zip(conjoint_attributes, part_worth, level_name):
+        st.write(f"### Attribute: {item}")
+        st.write(f"    **Relative importance:** {attribute_importance[conjoint_attributes.tolist().index(item)]}%")
+        st.write(f"    **Level wise part worths:**")
+        for level, value in zip(levels, pw):
+            st.write(f"        {level}: {value}")
+            part_worth_dict[level] = value
 
-    # Plot of feature importance
-    st.write("Feature Importance:")
-    alt_data = pd.DataFrame(list(importance_per_feature.items()), columns=['attr', 'importance']).sort_values(by='importance', ascending=False)
-    fig, ax = plt.subplots(figsize=(12, 8))
-    plt.barh(alt_data['attr'], alt_data['importance'])
-    plt.xlabel('% importance')
-    plt.ylabel('Attributes')
-    st.pyplot(fig)
+    # Plotting relative importance of attributes
+    plt.figure(figsize=(10, 5))
+    sns.barplot(x=conjoint_attributes, y=attribute_importance)
+    plt.title('Relative Importance of Attributes')
+    plt.xlabel('Attributes')
+    plt.ylabel('Importance (%)')
+    st.pyplot(plt)
 
-    # Interpretation of feature importance
-    st.markdown("**Interpretation of Feature Importance:**")
-    st.write("""
-    The feature importance plot shows the range of part-worths for each attribute, which represents its overall importance.
-    Attributes with larger ranges are more important in influencing decisions.
+    # Utility calculation
+    utility = []
+    for i in range(df.shape[0]):
+        score = sum([part_worth_dict[df[attr][i]] for attr in conjoint_attributes])
+        utility.append(score)
+    df['utility'] = utility
+
+    # Profile with the highest utility score
+    best_profile = df.iloc[np.argmax(utility)]
+    st.write("### The profile that has the highest utility score:")
+    st.write(best_profile)
+
+    # Interpretation of best profile:
+    st.markdown("""
+    **Interpretation of the Best Profile:**
+    - The profile with the highest utility score represents the combination of attribute levels that is most preferred by respondents.
+    - This profile can guide decision-makers to design a product or service with attributes that maximize consumer satisfaction.
     """)
 
-    # Plot of relative importance
-    st.write("Relative Feature Importance:")
-    alt_data = pd.DataFrame(list(relative_importance_per_feature.items()), columns=['attr', 'relative_importance (pct)']).sort_values(by='relative_importance (pct)', ascending=False)
-    fig, ax = plt.subplots(figsize=(12, 8))
-    plt.barh(alt_data['attr'], alt_data['relative_importance (pct)'])
-    plt.xlabel('% relative importance')
-    plt.ylabel('Attributes')
-    st.pyplot(fig)
+    # Preferred levels in each attribute
+    st.write("### Preferred levels in each attribute:")
+    for i, item in enumerate(conjoint_attributes):
+        st.write(f"Preferred level in **{item}** is: **{level_name[i][important_levels[item]]}**")
 
-    # Interpretation of relative importance
-    st.markdown("**Interpretation of Relative Importance:**")
-    st.write("""
-    This plot shows the normalized importance of each attribute as a percentage of the total. 
-    Higher percentages indicate more critical attributes in the overall decision-making process.
+    # Interpretation of preferred levels:
+    st.markdown("""
+    **Interpretation of Preferred Levels:**
+    - For each attribute, the level with the highest part-worth utility indicates the respondents' preferred option.
+    - These preferred levels are the most favored by respondents and can be prioritized in product development or marketing strategies.
     """)
 
-else:
-    st.write("Please upload a dataset to proceed.")
+    # --- NEW PLOTS ---
+
+    # Plot part-worth utilities for each attribute
+    for i, item in enumerate(conjoint_attributes):
+        plt.figure(figsize=(10, 5))
+        sns.barplot(x=level_name[i], y=part_worth[i])
+        plt.title(f'Part-Worth Utilities for {item}')
+        plt.xlabel(f'{item} Levels')
+        plt.ylabel('Part-Worth Utility')
+        st.pyplot(plt)
+        st.write(f"**Interpretation:** The higher the part-worth utility for a particular level of {item}, the more preferred that level is by respondents.")
+
+    # Plot attribute vs % importance
+    plt.figure(figsize=(10, 5))
+    sns.barplot(x=conjoint_attributes, y=attribute_importance)
+    plt.title('Attribute vs % Importance')
+    plt.xlabel('Attributes')
+    plt.ylabel('Importance (%)')
+    st.pyplot(plt)
+    st.write("""
+    **Interpretation:** This plot shows how each attribute contributes to the overall decision-making process, with attributes having higher % importance playing a bigger role in the ranking decisions.
+    """)
+
+    # Plot attribute vs relative importance
+    plt.figure(figsize=(10, 5))
+    sns.barplot(x=conjoint_attributes, y=part_worth_range)
+    plt.title('Attribute vs Relative Importance')
+    plt.xlabel('Attributes')
+    plt.ylabel('Relative Importance')
+    st.pyplot(plt)
+    st.write("""
+    **Interpretation:** Relative importance shows the range of part-worth utilities within each attribute. Higher values indicate a wider range of preferences within that attribute, making it more influential in the overall decision-making.
+    """)
