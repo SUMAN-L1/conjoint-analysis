@@ -71,7 +71,7 @@ if uploaded_file is not None:
         end = begin + nlevels - 1
 
         new_part_worth = list(model_fit.params[begin:end])
-        new_part_worth.append((-1) * sum(new_part_worth))
+        new_part_worth.append((-1) * sum(new_part_worth))  # Constraint part-worths sum to 0
         important_levels[item] = np.argmax(new_part_worth)
         part_worth.append(new_part_worth)
         part_worth_range.append(max(new_part_worth) - min(new_part_worth))
@@ -79,9 +79,23 @@ if uploaded_file is not None:
     # Attribute importance
     attribute_importance = [round(100 * (i / sum(part_worth_range)), 2) for i in part_worth_range]
     
-    st.write("### Attribute Importance:")
-    attribute_importance_dict = dict(zip(conjoint_attributes, attribute_importance))
-    st.write(attribute_importance_dict)
+    # Creating a single DataFrame to hold all the attribute, part-worth, and importance information
+    part_worth_data = []
+    for item, pw, levels, importance in zip(conjoint_attributes, part_worth, level_name, attribute_importance):
+        for level, value in zip(levels, pw):
+            part_worth_data.append({
+                'Attribute': item,
+                'Level': level,
+                'Part-Worth': round(value, 4),
+                'Relative Importance (%)': importance
+            })
+    
+    # Convert to DataFrame
+    part_worth_df = pd.DataFrame(part_worth_data)
+    
+    # Display the table in Streamlit
+    st.write("### Part-Worths and Attribute Importance Table:")
+    st.dataframe(part_worth_df)
 
     # Visualizing attribute importance using Plotly
     fig_importance = px.bar(
@@ -91,28 +105,6 @@ if uploaded_file is not None:
         title='Relative Importance of Attributes'
     )
     st.plotly_chart(fig_importance)
-
-    # Part-worths
-    part_worth_dict = {}
-    for item, pw, levels in zip(conjoint_attributes, part_worth, level_name):
-        st.write(f"### Attribute: {item}")
-        st.write(f"    Relative importance: {attribute_importance[conjoint_attributes.tolist().index(item)]}%")
-        st.write(f"    Level wise part-worths:")
-        for level, value in zip(levels, pw):
-            st.write(f"        {level}: {value}")
-            part_worth_dict[level] = value
-
-    # Visualizing Part-worths using Plotly
-    for item, pw, levels in zip(conjoint_attributes, part_worth, level_name):
-        fig_pw = go.Figure(data=[
-            go.Bar(name=f'{item}', x=levels, y=pw)
-        ])
-        fig_pw.update_layout(
-            title=f"Part-worths for {item}",
-            xaxis_title="Levels",
-            yaxis_title="Part-worth"
-        )
-        st.plotly_chart(fig_pw)
 
     # PCA for attribute importance (optional advanced technique)
     st.write("### PCA Analysis on Attributes:")
@@ -133,7 +125,7 @@ if uploaded_file is not None:
     # Utility calculation
     utility = []
     for i in range(df.shape[0]):
-        score = sum([part_worth_dict[df[attr][i]] for attr in conjoint_attributes])
+        score = sum([part_worth_df.loc[(part_worth_df['Attribute'] == attr) & (part_worth_df['Level'] == df[attr][i]), 'Part-Worth'].values[0] for attr in conjoint_attributes])
         utility.append(score)
     df['utility'] = utility
 
